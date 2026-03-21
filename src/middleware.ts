@@ -15,8 +15,8 @@ export function middleware(request: NextRequest) {
   // API auth routes - no auth needed
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
 
-  // Proxy routes /api/v1/* - use API key auth (handled in the route handler itself)
-  if (pathname.startsWith("/api/v1/")) return NextResponse.next();
+  // Proxy routes /v1/* and /api/v1/* - use API key auth (handled in the route handler itself)
+  if (pathname.startsWith("/v1/") || pathname.startsWith("/api/v1/")) return NextResponse.next();
 
   // Admin API routes /api/* - check session or admin key
   if (pathname.startsWith("/api/")) {
