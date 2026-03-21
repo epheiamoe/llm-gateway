@@ -1,29 +1,27 @@
 {
   "name": "llm-gateway",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Lightweight LLM API gateway with multi-provider routing, fallback chains, sticky routing, and a built-in management UI.",
-  "module": "src/index.ts",
-  "main": "src/index.ts",
-  "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run src/index.ts",
-    "dev:node": "tsx src/index.ts",
-    "start": "bun run src/index.ts",
-    "start:node": "tsx src/index.ts"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/bun": "latest",
-    "playwright": "^1.58.2",
-    "tsx": "^4"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "dev": "next dev -p 3456 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -p 3456 -H 0.0.0.0"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.0",
     "better-sqlite3": "^11.0.0",
-    "hono": "^4.12.3"
+    "next": "^15.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.8",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^5.8.3"
   }
 }
