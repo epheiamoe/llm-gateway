@@ -135,7 +135,26 @@ export default function Playground() {
             {!trace ? (
               <div style={{ color: "var(--text-dim)", textAlign: "center", padding: 40 }}>Select a model or chain and send a request</div>
             ) : trace.success === false ? (
-              <div style={{ color: "var(--red)", padding: 20 }}>Error: {trace.error || "Unknown error"}</div>
+              <div style={{ padding: 20 }}>
+                <div style={{ color: "var(--red)", marginBottom: 12 }}>
+                  Error: {trace.error || trace.lastErrorResponse?.text || trace.steps?.filter((s: any) => s.error).map((s: any) => s.error).join("; ") || "Unknown error"}
+                </div>
+                {trace.lastErrorResponse && (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", background: "rgba(255,0,0,0.05)", padding: 10, borderRadius: 6, whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 200, overflow: "auto" }}>
+                    <div style={{ marginBottom: 4 }}>Status: {trace.lastErrorResponse.status}</div>
+                    {trace.lastErrorResponse.raw || trace.lastErrorResponse.text || JSON.stringify(trace.lastErrorResponse.body, null, 2)}
+                  </div>
+                )}
+                {trace.steps && trace.steps.length > 0 && (
+                  <div className="trace-flow" style={{ marginTop: 12 }}>
+                    {trace.steps.map((s: any, i: number) => (
+                      <div key={i} style={{ fontSize: 11, color: s.error ? "var(--red)" : "var(--text-dim)", padding: "2px 0" }}>
+                        {s.action} {s.provider ? `→ ${s.provider}` : ""} {s.status ? `[${s.status}]` : ""} {s.error ? `— ${s.error}` : ""} {s.latencyMs ? `${s.latencyMs}ms` : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="trace-flow">
                 {(trace.steps || []).map((s: any, i: number) => {
