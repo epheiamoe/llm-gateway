@@ -118,6 +118,19 @@ async function handleRequest(request: Request, pathSegments: string[]): Promise<
     return routeRequest(modelName, "/v1/responses", "POST", request.headers, body, isStreaming);
   }
 
+  // POST /v1/messages (Anthropic-compatible)
+  if (request.method === "POST" && subPath === "messages") {
+    const body = await request.json();
+    const modelName = body.model;
+    if (!modelName) {
+      return NextResponse.json({ error: { message: "model is required", type: "invalid_request_error" } }, { status: 400 });
+    }
+    const modelError = checkAllowedModels(request, modelName);
+    if (modelError) return modelError;
+    const isStreaming = body.stream === true;
+    return routeRequest(modelName, "/v1/messages", "POST", request.headers, body, isStreaming);
+  }
+
   // POST /v1/embeddings
   if (request.method === "POST" && subPath === "embeddings") {
     const body = await request.json();
