@@ -1,0 +1,23 @@
+{
+  "name": "llm-gateway",
+  "script": "E:\\Epheia\\dev\\dev_tool\\llm-gateway\\node_modules\\next\\dist\\bin\\next",
+  "args": "start -p 3456 -H 0.0.0.0",
+  "cwd": "E:\\Epheia\\dev\\dev_tool\\llm-gateway",
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "3456",
+    "ADMIN_KEY": "3bf7eea39c3bff5fef5afb10771c181b",
+    "OPENCODE_GO_FALLBACK_MODEL": "opencode-go",
+    "OPENCODE_GO_MODELS": "glm-5.2,glm-5.1,kimi-k2.7-code,kimi-k2.6,mimo-v2.5,mimo-v2.5-pro,minimax-m3,minimax-m2.7,qwen3.7-max,qwen3.7-plus,qwen3.6-plus,deepseek-v4-pro,deepseek-v4-flash"
+  },
+  "autorestart": true,
+  "max_restarts": 10,
+  "min_uptime": "10s",
+  "restart_delay": 3000,
+  "max_memory_restart": "512M",
+  "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+  "error_file": "E:\\Epheia\\dev\\dev_tool\\llm-gateway\\logs\\pm2-error.log",
+  "out_file": "E:\\Epheia\\dev\\dev_tool\\llm-gateway\\logs\\pm2-out.log",
+  "merge_logs": true,
+  "watch": false
+}
