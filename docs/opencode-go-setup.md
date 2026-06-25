@@ -41,7 +41,7 @@
 
 ```bash
 PORT=3456
-ADMIN_KEY=3bf7eea39c3bff5fef5afb10771c181b
+ADMIN_KEY=37821f89dfd36d0a85df8b47597bbcf7
 OPENCODE_GO_FALLBACK_MODEL=opencode-go
 OPENCODE_GO_MODELS=glm-5.2,glm-5.1,kimi-k2.7-code,kimi-k2.6,mimo-v2.5,mimo-v2.5-pro,minimax-m3,minimax-m2.7,qwen3.7-max,qwen3.7-plus,qwen3.6-plus,deepseek-v4-pro,deepseek-v4-flash
 ```
@@ -101,28 +101,72 @@ Dashboard 上可以手动 Pin 某个 Deployment，TTL 可以设很长。
 
 ## 开机自启动
 
-当前是 `npm run dev` 开发模式。要设置为 Windows 开机启动：
+推荐方式：安装 **LLM Gateway Tray** 托盘应用（见下文），勾选"Auto-start on logon"即可。
 
-1. 先构建：
+传统方式（仍可继续使用）：
+
+1. 先构建 Gateway：
    ```bash
    npm run build
    ```
-2. 创建启动脚本 `start.ps1`：
-   ```powershell
-   $env:PORT = "3456"
-   $env:ADMIN_KEY = "your-admin-key"
-   $env:OPENCODE_GO_FALLBACK_MODEL = "opencode-go"
-   $env:OPENCODE_GO_MODELS = "glm-5.2,glm-5.1,..."
-   Set-Location "E:\Epheia\dev\dev_tool\llm-gateway"
-   npm start
-   ```
-3. Windows Task Scheduler：
+2. 使用仓库中已提供的 `start.ps1` 和 Task Scheduler 任务 `llm-gateway-autostart`：
    - 触发器：**At log on**
    - 操作：启动 `powershell.exe`
-   - 参数：`-ExecutionPolicy Bypass -File "E:\Epheia\dev\dev_tool\llm-gateway\start.ps1"`
-   - 勾选：**无论用户是否登录都要运行**
+   - 参数：`-ExecutionPolicy Bypass -WindowStyle Hidden -File "E:\Epheia\dev\dev_tool\llm-gateway\start.ps1"`
 
 注意：`gateway.db`（含 Provider API key）和 `.env.local` 不要进 git，已在 `.gitignore` 中排除。
+
+## Windows 托盘伴侣（推荐）
+
+为了不用记端口号、不用打开浏览器输入地址，也为了方便在服务崩溃时一键启动，我们提供了一个 Windows 系统托盘应用。
+
+### 功能
+
+- 任务栏托盘图标实时显示服务状态：绿色（运行中）、黄色（启动/重启中）、红色（停止/错误）。
+- 左键点击托盘图标打开状态窗口。
+- 右键菜单：Open Dashboard、Start Service、Stop Service、Restart Service、Auto-start on logon、Exit。
+- 点击 Open Dashboard 时，如果服务未运行会自动先启动服务。
+- 服务崩溃时仍可点击 Start Service 重新拉起。
+
+### 位置
+
+```text
+apps/tray/
+```
+
+### 构建安装包
+
+需要：Node.js、Rust stable-msvc、WiX Toolset v3/v4（MSI）、NSIS（exe 安装包）。
+
+```powershell
+cd apps/tray
+npm install
+npm run tauri build
+```
+
+产物：
+
+```text
+apps/tray/src-tauri/target/release/bundle/
+├── msi/LLM Gateway Tray_2.0.0_x64_en-US.msi
+└── nsis/llm-gateway-tray_2.0.0_x64-setup.exe
+```
+
+### 安装使用
+
+1. 运行 `.msi` 安装。
+2. 从开始菜单启动 **LLM Gateway Tray**。
+3. 可以固定到任务栏，获得一键打开。
+4. 安装后首次启动会自动识别 `E:\Epheia\dev\dev_tool\llm-gateway`。如果 Gateway 放在其他位置，设置环境变量 `LLM_GATEWAY_HOME` 或创建 `%APPDATA%\llm-gateway-tray\config.json`：
+   ```json
+   { "gateway_home": "C:\\path\\to\\llm-gateway" }
+   ```
+
+### 注意事项
+
+- 托盘应用本身不存储任何 API key 或 `ADMIN_KEY`。
+- 如果已经设置了 Task Scheduler 的 `llm-gateway-autostart`，可以保留，也可以禁用，改用托盘应用自带的自启。
+- 详细开发说明见 `apps/tray/README.md`。
 
 ## 后续维护
 

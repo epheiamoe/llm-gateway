@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Vite build output
+dist/
+
+# Rust build output
+target/
+
+# Tauri generated files
+gen/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Installer artifacts
+*.msi
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+src-tauri/target/release/bundle/
+
+# Editor / OS
+.DS_Store
+.vscode/
+*.log

@@ -44,3 +44,6 @@ DESIGN.md
 
 # pm2 ecosystem config (contains ADMIN_KEY)
 ecosystem.config.cjs
+
+# Swarm process artifacts
+.swarm/
