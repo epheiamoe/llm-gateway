@@ -72,13 +72,29 @@ async function handleRequest(request: Request, pathSegments: string[]): Promise<
 
   // GET /v1/models
   if (request.method === "GET" && subPath === "models") {
-    const models = listModels().map((m: any) => ({
+    const dbModels = listModels().map((m: any) => ({
       id: m.name,
       object: "model",
       created: Math.floor(m.createdAt / 1000),
       owned_by: "llm-gateway",
     }));
-    return NextResponse.json({ object: "list", data: models });
+    // Optional pass-through models for providers like OpenCode GO where the gateway
+    // routes by a fallback model but still needs to advertise the real model IDs.
+    const passThrough = process.env.OPENCODE_GO_MODELS
+      ? process.env.OPENCODE_GO_MODELS.split(",").map(s => s.trim()).filter(Boolean).map(name => ({
+          id: name,
+          object: "model",
+          created: Math.floor(Date.now() / 1000),
+          owned_by: "opencode-go",
+        }))
+      : [];
+    const seen = new Set<string>();
+    const data = [...dbModels, ...passThrough].filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+    return NextResponse.json({ object: "list", data });
   }
 
   // GET /v1/responses/:id - retrieve response

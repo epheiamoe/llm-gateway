@@ -450,9 +450,10 @@ async function forwardRequest(deployment: Deployment, inboundPath: string, metho
     requestBody = convertOpenAIToGemini(body);
     responseTransform = "gemini-chat";
   } else {
-    // OpenAI/Anthropic: replace model name
+    // OpenAI/Anthropic: prefer the model requested by the client (pass-through),
+    // fall back to the deployment's configured model name.
     url = `${baseUrl}${inboundPath}`;
-    requestBody = { ...body, model: deployment.modelName };
+    requestBody = { ...body, model: body?.model || deployment.modelName };
   }
 
   const outHeaders: Record<string, string> = { "Content-Type": "application/json" };
@@ -548,7 +549,7 @@ async function tryDeployment(
                       id: "chatcmpl-" + Date.now(),
                       object: "chat.completion.chunk",
                       created: Math.floor(Date.now() / 1000),
-                      model: modelName,
+                      model: body?.model || modelName,
                       choices: [{
                         index: 0,
                         delta: { content: geminiChunk.candidates?.[0]?.content?.parts?.[0]?.text || "" },
@@ -788,7 +789,23 @@ export async function routeRequest(requestModelName: string, path: string, metho
   const traceStart = Date.now();
   const trace: RouteTrace = { requestModel: requestModelName, steps: [], success: false, totalLatencyMs: 0 };
 
-  const chain: any = getChainByName(requestModelName);
+  // OpenCode GO pass-through: if the requested model is unknown to the gateway,
+  // but a fallback model is configured, route through that model while preserving
+  // the original model name in the upstream request body (handled in forwardRequest).
+  // This lets a single gateway model (e.g. "opencode-go") serve all OpenCode GO
+  // models with sticky routing shared across them — maximizing key affinity.
+  const fallbackModel = process.env.OPENCODE_GO_FALLBACK_MODEL;
+  let resolvedModelName = requestModelName;
+  if (fallbackModel && !getModelByName(requestModelName)) {
+    const fallback = getModelByName(fallbackModel);
+    if (fallback) {
+      resolvedModelName = fallbackModel;
+      trace.stickyKey = fallbackModel;
+      trace.steps.push({ action: "fallback_model", model: requestModelName, provider: fallbackModel, error: "routing through configured fallback model" });
+    }
+  }
+
+  const chain: any = getChainByName(resolvedModelName);
   // When routing through a chain, use chain name as sticky key (not individual model names)
   if (chain) trace.stickyKey = chain.name;
   let response: Response | null = null;
@@ -822,9 +839,9 @@ export async function routeRequest(requestModelName: string, path: string, metho
 
     if (chain.mode === "models") response = await routeModelsChain(items, path, method, headers, body, isStreaming, trace);
     else if (chain.mode === "provider") response = await routeProviderChain(items, path, method, headers, body, isStreaming, trace);
-    else { const t = Array.isArray(items) ? items[0] : requestModelName; response = await routeModel(t, path, method, headers, body, isStreaming, trace); }
+    else { const t = Array.isArray(items) ? items[0] : resolvedModelName; response = await routeModel(t, path, method, headers, body, isStreaming, trace); }
   } else {
-    response = await routeModel(requestModelName, path, method, headers, body, isStreaming, trace);
+    response = await routeModel(resolvedModelName, path, method, headers, body, isStreaming, trace);
   }
 
   trace.totalLatencyMs = Date.now() - traceStart;
