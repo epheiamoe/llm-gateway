@@ -11,5 +11,5 @@ if (-not (Test-Path ".next\BUILD_ID")) {
 # Ensure pm2 resurrects saved processes
 & "$env:APPDATA\npm\pm2.cmd" resurrect
 
-# Also explicitly restart llm-gateway
+# Also explicitly restart llm-gateway (loads .env.local automatically)
 & "$env:APPDATA\npm\pm2.cmd" restart "E:\Epheia\dev\dev_tool\llm-gateway\pm2.config.json" 2>$null
