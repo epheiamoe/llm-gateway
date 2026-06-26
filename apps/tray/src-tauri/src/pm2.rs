@@ -157,22 +157,46 @@ pub async fn jlist_status(pm2_path: &Path, name: &str) -> Result<Pm2ProcessStatu
 }
 
 async fn run(pm2_path: &Path, args: &[&str]) -> Result<std::process::Output, Pm2Error> {
-    let output = Command::new("cmd")
-        .arg("/C")
-        .arg(pm2_path)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| Pm2Error::CommandFailed(e.to_string()))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let message = if stderr.is_empty() { stdout } else { stderr };
-        return Err(Pm2Error::CommandFailed(message));
+        let output = Command::new("cmd")
+            .arg("/C")
+            .arg(pm2_path)
+            .args(args)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+            .map_err(|e| Pm2Error::CommandFailed(e.to_string()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let message = if stderr.is_empty() { stdout } else { stderr };
+            return Err(Pm2Error::CommandFailed(message));
+        }
+
+        Ok(output)
     }
+    #[cfg(not(windows))]
+    {
+        let output = Command::new(pm2_path)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| Pm2Error::CommandFailed(e.to_string()))?;
 
-    Ok(output)
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let message = if stderr.is_empty() { stdout } else { stderr };
+            return Err(Pm2Error::CommandFailed(message));
+        }
+
+        Ok(output)
+    }
 }
 
 fn map_status(status: &str) -> Pm2ProcessStatus {

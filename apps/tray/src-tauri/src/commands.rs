@@ -221,27 +221,58 @@ async fn ensure_build(gateway_home: &PathBuf) -> Result<(), String> {
     }
 
     let npm_path = resolve_npm().ok_or("npm not found; cannot build gateway")?;
-    let output = tokio::process::Command::new("cmd")
-        .arg("/C")
-        .arg(npm_path)
-        .arg("run")
-        .arg("build")
-        .current_dir(gateway_home)
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
 
-    if output.status.success() {
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let message = if stderr.is_empty() {
-            stdout.to_string()
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let output = tokio::process::Command::new("cmd")
+            .arg("/C")
+            .arg(npm_path)
+            .arg("run")
+            .arg("build")
+            .current_dir(gateway_home)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            Ok(())
         } else {
-            stderr.to_string()
-        };
-        Err(message)
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let message = if stderr.is_empty() {
+                stdout.to_string()
+            } else {
+                stderr.to_string()
+            };
+            Err(message)
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let output = tokio::process::Command::new(npm_path)
+            .arg("run")
+            .arg("build")
+            .current_dir(gateway_home)
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let message = if stderr.is_empty() {
+                stdout.to_string()
+            } else {
+                stderr.to_string()
+            };
+            Err(message)
+        }
     }
 }
 
@@ -253,18 +284,39 @@ fn resolve_npm() -> Option<PathBuf> {
         }
     }
 
-    let output = std::process::Command::new("cmd")
-        .args(["/C", "where", "npm"])
-        .output()
-        .ok()?;
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "where", "npm"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if trimmed.ends_with(".cmd") || trimmed.ends_with(".bat") {
+                    return Some(PathBuf::from(trimmed));
+                }
             }
-            if trimmed.ends_with(".cmd") || trimmed.ends_with(".bat") {
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let output = std::process::Command::new("which")
+            .arg("npm")
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let trimmed = stdout.trim();
+            if !trimmed.is_empty() {
                 return Some(PathBuf::from(trimmed));
             }
         }
