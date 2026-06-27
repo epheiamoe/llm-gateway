@@ -82,18 +82,18 @@ fn main() {
             }
 
             tray::build(&app_handle)?;
-            window::open_status_window(&app_handle);
+            // Do not open the status window automatically at startup to avoid
+            // interrupting the user. It opens on tray left-click.
 
-            let initial_app = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                let s = poll_state(&initial_app).await;
-                let state = initial_app.state::<AppState>();
-                state.set(&initial_app, s, None);
-            });
-
+            // Background polling only: updates tray icon color and tooltip.
             let poll_app = app_handle.clone();
             tauri::async_runtime::spawn(async move {
+                // Give the gateway a moment to finish starting before first poll.
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                let s = poll_state(&poll_app).await;
+                let state = poll_app.state::<AppState>();
+                state.set(&poll_app, s, None);
+
                 let mut interval = tokio::time::interval(Duration::from_secs(5));
                 loop {
                     interval.tick().await;
