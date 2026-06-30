@@ -8,6 +8,7 @@ mod pm2;
 mod state;
 mod tray;
 mod window;
+mod win32;
 
 use std::time::Duration;
 
@@ -82,6 +83,9 @@ fn main() {
             }
 
             tray::build(&app_handle)?;
+            // Hide the single-instance helper window so the tray app does not
+            // show a 16x16 ghost window at startup.
+            win32::single_instance_window::hide();
             // Do not open the status window automatically at startup to avoid
             // interrupting the user. It opens on tray left-click.
 
@@ -102,6 +106,32 @@ fn main() {
                     state.set(&poll_app, s, None);
                 }
             });
+
+            // Auto-start the gateway service on tray launch if it is not already
+            // running. This is silent: no windows are shown and all subprocesses
+            // use CREATE_NO_WINDOW.
+            if has_config && state.current() != TrayState::Pm2Missing {
+                let auto_app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    let state = auto_app.state::<AppState>();
+                    let (gateway_home, pm2_path) = {
+                        let guard = state.pm2_path.lock().unwrap();
+                        (state.gateway_home.clone(), guard.clone())
+                    };
+                    if let Some(pm2_path) = pm2_path {
+                        if matches!(
+                            health::poll(&gateway_home, Some(&pm2_path)).await,
+                            health::ServiceState::Stopped
+                        ) {
+                            state.set(&auto_app, TrayState::Starting, Some("Auto-starting gateway service...".into()));
+                            if let Err(e) = pm2::start_or_restart(&pm2_path, &gateway_home).await {
+                                state.set(&auto_app, TrayState::Error, Some(format!("Auto-start failed: {}", e)));
+                            }
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })

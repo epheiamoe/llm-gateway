@@ -35,11 +35,12 @@ function applyStatus(state: ServiceState, message?: string) {
   statusText.textContent = stateLabels[state] ?? state;
   messageEl.textContent = message ?? '';
 
-  const disabled = state === 'pm2_missing';
+  const disabled = state === 'pm2_missing' || state === 'starting' || state === 'stopping';
+  const dashboardDisabled = state === 'pm2_missing';
   btnStart.disabled = disabled;
   btnStop.disabled = disabled;
   btnRestart.disabled = disabled;
-  btnDashboard.disabled = disabled;
+  btnDashboard.disabled = dashboardDisabled;
 }
 
 async function refreshStatus() {

@@ -7,14 +7,21 @@ pub fn open_status_window(app: &AppHandle) {
         return;
     }
 
-    let _ = WebviewWindowBuilder::new(app, "status", WebviewUrl::App("index.html".into()))
-        .title("LLM Gateway Tray")
-        .inner_size(360.0, 320.0)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(true)
-        .visible(true)
-        .build();
+    // Build from the pre-defined configuration so Tauri does not auto-create a
+    // visible window at startup. The configuration has `create: false` and
+    // `visible: false`; we explicitly show it here when the user requests it.
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "status")
+        .expect("missing 'status' window config")
+        .clone();
+    if let Ok(window) = WebviewWindowBuilder::from_config(app, &config).and_then(|b| b.build()) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 pub fn open_dashboard_window(app: &AppHandle) {

@@ -1,6 +1,6 @@
 {
   "productName": "LLM Gateway Tray",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "identifier": "moe.epheia.llm-gateway-tray",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -9,7 +9,20 @@
     "devUrl": "http://localhost:1420"
   },
   "app": {
-    "windows": [],
+    "windows": [
+      {
+        "label": "status",
+        "create": false,
+        "title": "LLM Gateway Tray",
+        "width": 360,
+        "height": 320,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": true,
+        "visible": false,
+        "focus": false
+      }
+    ],
     "security": {
       "csp": null
     }

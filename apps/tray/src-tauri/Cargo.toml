@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-tray"
-version = "2.0.0"
+version = "2.0.2"
 description = "Windows system tray companion for llm-gateway"
 authors = ["Epheia"]
 edition = "2021"
@@ -19,4 +19,5 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 thiserror = "1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 

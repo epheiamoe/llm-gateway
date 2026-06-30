@@ -55,20 +55,41 @@ pub fn resolve() -> Result<PathBuf, Pm2Error> {
 }
 
 fn find_where_pm2() -> Option<PathBuf> {
-    let output = std::process::Command::new("cmd")
-        .args(["/C", "where", "pm2"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "where", "pm2"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
         }
-        if trimmed.ends_with(".cmd") || trimmed.ends_with(".bat") {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.ends_with(".cmd") || trimmed.ends_with(".bat") {
+                return Some(PathBuf::from(trimmed));
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let output = std::process::Command::new("which")
+            .arg("pm2")
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let trimmed = stdout.trim();
+        if !trimmed.is_empty() {
             return Some(PathBuf::from(trimmed));
         }
     }
@@ -87,18 +108,39 @@ fn common_pm2_paths() -> Vec<PathBuf> {
 }
 
 fn npm_prefix_pm2() -> Option<PathBuf> {
-    let output = std::process::Command::new("cmd")
-        .args(["/C", "npm", "config", "get", "prefix"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "npm", "config", "get", "prefix"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if prefix.is_empty() {
+            return None;
+        }
+        Some(PathBuf::from(prefix).join("pm2.cmd"))
     }
-    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if prefix.is_empty() {
-        return None;
+    #[cfg(not(windows))]
+    {
+        let output = std::process::Command::new("npm")
+            .args(["config", "get", "prefix"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if prefix.is_empty() {
+            return None;
+        }
+        Some(PathBuf::from(prefix).join("bin").join("pm2"))
     }
-    Some(PathBuf::from(prefix).join("pm2.cmd"))
 }
 
 fn node_pm2_paths() -> Vec<PathBuf> {
