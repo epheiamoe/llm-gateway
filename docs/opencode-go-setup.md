@@ -101,18 +101,11 @@ Dashboard 上可以手动 Pin 某个 Deployment，TTL 可以设很长。
 
 ## 开机自启动
 
-推荐方式：安装 **LLM Gateway Tray** 托盘应用（见下文），勾选"Auto-start on logon"即可。
+推荐方式：安装 **LLM Gateway Tray** 托盘应用，勾选"Auto-start on logon"。
 
-传统方式（仍可继续使用）：
-
-1. 先构建 Gateway：
-   ```bash
-   npm run build
-   ```
-2. 使用仓库中已提供的 `start.ps1` 和 Task Scheduler 任务 `llm-gateway-autostart`：
-   - 触发器：**At log on**
-   - 操作：启动 `powershell.exe`
-   - 参数：`-ExecutionPolicy Bypass -WindowStyle Hidden -File "E:\Epheia\dev\dev_tool\llm-gateway\start.ps1"`
+- 托盘应用会在登录时静默启动（不弹窗口、不弹终端）。
+- 托盘应用检测到服务未运行时会自动在后台启动 Gateway。
+- 不再需要使用 Task Scheduler 或 `start.ps1`；旧任务已移除。
 
 注意：`gateway.db`（含 Provider API key）和 `.env.local` 不要进 git，已在 `.gitignore` 中排除。
 
@@ -123,10 +116,11 @@ Dashboard 上可以手动 Pin 某个 Deployment，TTL 可以设很长。
 ### 功能
 
 - 任务栏托盘图标实时显示服务状态：绿色（运行中）、黄色（启动/重启中）、红色（停止/错误）。
-- 左键点击托盘图标打开状态窗口。
+- 左键点击托盘图标打开状态窗口；**启动时不自动打开窗口**。
 - 右键菜单：Open Dashboard、Start Service、Stop Service、Restart Service、Auto-start on logon、Exit。
+- 托盘应用启动后会在后台自动启动 Gateway 服务（如果未运行）。
 - 点击 Open Dashboard 时，如果服务未运行会自动先启动服务。
-- 服务崩溃时仍可点击 Start Service 重新拉起。
+- 服务停止/崩溃时可点击 Start Service 重新拉起。
 
 ### 位置
 
@@ -148,8 +142,8 @@ npm run tauri build
 
 ```text
 apps/tray/src-tauri/target/release/bundle/
-├── msi/LLM Gateway Tray_2.0.0_x64_en-US.msi
-└── nsis/llm-gateway-tray_2.0.0_x64-setup.exe
+├── msi/LLM Gateway Tray_2.0.2_x64_en-US.msi
+└── nsis/llm-gateway-tray_2.0.2_x64-setup.exe
 ```
 
 ### 安装使用
@@ -165,7 +159,7 @@ apps/tray/src-tauri/target/release/bundle/
 ### 注意事项
 
 - 托盘应用本身不存储任何 API key 或 `ADMIN_KEY`。
-- 如果已经设置了 Task Scheduler 的 `llm-gateway-autostart`，可以保留，也可以禁用，改用托盘应用自带的自启。
+- 托盘应用已替代 Task Scheduler 的 `llm-gateway-autostart`，旧任务已移除。
 - 详细开发说明见 `apps/tray/README.md`。
 
 ## 后续维护
@@ -177,7 +171,7 @@ apps/tray/src-tauri/target/release/bundle/
 ## 相关提交
 
 - Branch: `feat/opencode-go-pass-through`
-- Commit: `ed1f07d`
+- Commit: `5d922f8`
 
 ## 上游调研文档
 
