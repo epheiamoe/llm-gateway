@@ -83,13 +83,31 @@ function recordSuccess(deploymentId: string, modelName?: string) {
 
 }
 
-function recordFailure(deploymentId: string) {
+function recordFailure(deploymentId: string, status?: number, errorText?: string) {
   const fails = (consecutiveFailsMap.get(deploymentId) ?? 0) + 1;
   consecutiveFailsMap.set(deploymentId, fails);
-  if (fails >= MAX_CONSECUTIVE_FAILS) {
-    const cooldownMs = COOLDOWN_BASE * Math.min(fails - MAX_CONSECUTIVE_FAILS + 1, 5);
+
+  // OpenCode GO quota/authentication errors should immediately put the key on
+  // cooldown so sticky routing does not keep hammering an exhausted key.
+  const isQuotaError =
+    status === 429 ||
+    status === 402 ||
+    status === 401 ||
+    (errorText && /GoUsageLimitError|usage limit|Usage limit|insufficient_quota|quota_exceeded|billing/i.test(errorText));
+
+  if (isQuotaError || fails >= MAX_CONSECUTIVE_FAILS) {
+    const multiplier = isQuotaError ? 1 : Math.min(fails - MAX_CONSECUTIVE_FAILS + 1, 5);
+    const cooldownMs = COOLDOWN_BASE * multiplier;
     cooldowns.set(deploymentId, Date.now() + cooldownMs);
     updateStats(deploymentId, { cooldownUntil: Date.now() + cooldownMs, consecutiveFails: fails });
+  }
+}
+
+function clearStickyForDeployment(deploymentId: string) {
+  for (const [key, entry] of stickyMap) {
+    if (entry.deploymentId === deploymentId) {
+      stickyMap.delete(key);
+    }
   }
 }
 
@@ -651,7 +669,8 @@ async function tryDeployment(
 
       const attempt = dep.maxRetries - retries;
       if (retries > 0) { retries--; await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 16000))); continue; }
-      recordFailure(dep.id);
+      recordFailure(dep.id, resp.status, errorBody);
+      clearStickyForDeployment(dep.id);
       break;
     } catch (err: any) {
       lastError = err.message || String(err);
@@ -671,7 +690,8 @@ async function tryDeployment(
       trace.steps.push({ action: "fail", model: dep.modelName, provider: dep.providerName, status: 502, error: lastError.slice(0, 100) });
       const attemptErr = dep.maxRetries - retries;
       if (retries > 0) { retries--; await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attemptErr), 16000))); continue; }
-      recordFailure(dep.id);
+      recordFailure(dep.id, 502, lastError);
+      clearStickyForDeployment(dep.id);
       break;
     }
   }
@@ -680,7 +700,7 @@ async function tryDeployment(
 
 
 // --- Sticky routing: prefer last successful deployment for 2 hours ---
-const STICKY_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const STICKY_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const stickyMap = new Map<string, { deploymentId: string; until: number; manual?: boolean }>();
 
 function getStickyDeployment(modelName: string): string | null {
@@ -833,6 +853,9 @@ export async function routeRequest(requestModelName: string, path: string, metho
           trace.steps.push({ action: "fallback", provider: stickyDep.providerName, error: "sticky deployment failed, falling through to chain" });
           // Clear the failed sticky so chain doesn't try it again via getHealthyDeployments
           clearStickyRoute(chain.name);
+          // Also remove any other stickies pointing to this deployment so the
+          // next request doesn't route back to an exhausted key.
+          clearStickyForDeployment(stickyDep.id);
         }
       }
     }
