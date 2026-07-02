@@ -89,6 +89,11 @@ function isNonRetryableError(status?: number, errorText?: string): boolean {
   return /GoUsageLimitError|usage limit|Usage limit|insufficient_quota|quota_exceeded|billing|AuthError|Invalid API key|Authentication/i.test(errorText);
 }
 
+function isMonthlyQuotaError(errorText?: string): boolean {
+  if (!errorText) return false;
+  return /GoUsageLimitError|Monthly usage limit|limitName.*monthly|quota.*monthly/i.test(errorText);
+}
+
 function recordFailure(deploymentId: string, status?: number, errorText?: string) {
   const fails = (consecutiveFailsMap.get(deploymentId) ?? 0) + 1;
   consecutiveFailsMap.set(deploymentId, fails);
@@ -98,8 +103,12 @@ function recordFailure(deploymentId: string, status?: number, errorText?: string
   const isQuotaError = isNonRetryableError(status, errorText);
 
   if (isQuotaError || fails >= MAX_CONSECUTIVE_FAILS) {
-    const multiplier = isQuotaError ? 1 : Math.min(fails - MAX_CONSECUTIVE_FAILS + 1, 5);
-    const cooldownMs = COOLDOWN_BASE * multiplier;
+    // Monthly usage limits (e.g. OpenCode GO) reset only after days. Use a
+    // very long cooldown so client-side retry schedules (which can back off
+    // to thousands of seconds) do not loop back to the exhausted key.
+    const monthlyCooldownMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const baseCooldownMs = COOLDOWN_BASE * Math.min(fails - MAX_CONSECUTIVE_FAILS + 1, 5);
+    const cooldownMs = isMonthlyQuotaError(errorText) ? monthlyCooldownMs : (isQuotaError ? COOLDOWN_BASE : baseCooldownMs);
     cooldowns.set(deploymentId, Date.now() + cooldownMs);
     updateStats(deploymentId, { cooldownUntil: Date.now() + cooldownMs, consecutiveFails: fails });
   }
@@ -260,6 +269,33 @@ function normalizeTextContent(content: any): string {
   return "";
 }
 
+function convertResponsesInputToMessages(body: any): any[] {
+  const input = body?.input;
+  if (typeof input === "string") {
+    return [{ role: "user", content: input }];
+  }
+  if (Array.isArray(input)) {
+    return input.map((item: any) => {
+      if (typeof item === "string") return { role: "user", content: item };
+      if (item?.role && item?.content) {
+        return {
+          role: item.role,
+          content: Array.isArray(item.content)
+            ? item.content.map((part: any) => {
+                if (typeof part === "string") return part;
+                if (part?.type === "input_text" || part?.type === "output_text") return part.text || "";
+                if (part?.type === "text") return part.text || "";
+                return "";
+              }).filter(Boolean).join("\n\n")
+            : (item.content || ""),
+        };
+      }
+      return { role: "user", content: String(item || "") };
+    });
+  }
+  return body?.messages || [{ role: "user", content: "hi" }];
+}
+
 function convertOpenAIToResponsesInput(body: any) {
   if (body.input !== undefined) return body.input;
 
@@ -416,9 +452,6 @@ async function forwardRequest(deployment: Deployment, inboundPath: string, metho
   const isEmbeddingsRequest = inboundPath === EMBEDDINGS_API_PATH;
   const isRerankRequest = isRerankPath(inboundPath);
 
-  if (isResponsesRequest && !isResponsesProvider) {
-    throw new Error(`Provider ${deployment.providerName} does not support /v1/responses`);
-  }
   if (!isResponsesRequest && inboundPath !== PLAYGROUND_TEST_PATH && isResponsesProvider) {
     throw new Error(`Provider ${deployment.providerName} only supports /v1/responses`);
   }
@@ -445,9 +478,24 @@ async function forwardRequest(deployment: Deployment, inboundPath: string, metho
       url = `${baseUrl}/v1/chat/completions`;
       requestBody = { ...body, model: deployment.modelName };
     }
-  } else if (isResponsesProvider) {
-    url = `${baseUrl}${RESPONSES_API_PATH}`;
-    requestBody = { ...body, model: deployment.modelName };
+  } else if (isResponsesRequest) {
+    // OpenCode GO and many OpenAI-compatible providers do not expose /v1/responses.
+    // Convert to /v1/chat/completions so the same deployment can serve both APIs.
+    if (!isResponsesProvider) {
+      url = `${baseUrl}/v1/chat/completions`;
+      requestBody = {
+        model: body?.model || deployment.modelName,
+        messages: convertResponsesInputToMessages(body),
+        ...(body.max_output_tokens !== undefined ? { max_tokens: body.max_output_tokens } : {}),
+        ...(body.max_tokens !== undefined ? { max_tokens: body.max_tokens } : {}),
+        ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+        ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
+        ...(body.stream !== undefined ? { stream: body.stream } : {}),
+      };
+    } else {
+      url = `${baseUrl}${RESPONSES_API_PATH}`;
+      requestBody = { ...body, model: deployment.modelName };
+    }
   } else if (deployment.apiType === "gemini" && isEmbeddingsRequest) {
     url = `${baseUrl}/v1beta/models/${deployment.modelName}:batchEmbedContents`;
     requestBody = convertOpenAIEmbeddingsToGemini(body);
