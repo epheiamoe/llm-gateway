@@ -83,17 +83,19 @@ function recordSuccess(deploymentId: string, modelName?: string) {
 
 }
 
+function isNonRetryableError(status?: number, errorText?: string): boolean {
+  if (status === 401 || status === 402 || status === 429) return true;
+  if (!errorText) return false;
+  return /GoUsageLimitError|usage limit|Usage limit|insufficient_quota|quota_exceeded|billing|AuthError|Invalid API key|Authentication/i.test(errorText);
+}
+
 function recordFailure(deploymentId: string, status?: number, errorText?: string) {
   const fails = (consecutiveFailsMap.get(deploymentId) ?? 0) + 1;
   consecutiveFailsMap.set(deploymentId, fails);
 
   // OpenCode GO quota/authentication errors should immediately put the key on
   // cooldown so sticky routing does not keep hammering an exhausted key.
-  const isQuotaError =
-    status === 429 ||
-    status === 402 ||
-    status === 401 ||
-    (errorText && /GoUsageLimitError|usage limit|Usage limit|insufficient_quota|quota_exceeded|billing/i.test(errorText));
+  const isQuotaError = isNonRetryableError(status, errorText);
 
   if (isQuotaError || fails >= MAX_CONSECUTIVE_FAILS) {
     const multiplier = isQuotaError ? 1 : Math.min(fails - MAX_CONSECUTIVE_FAILS + 1, 5);
@@ -668,7 +670,11 @@ async function tryDeployment(
       trace.steps.push({ action: "fail", model: dep.modelName, provider: dep.providerName, status: resp.status, latencyMs: Date.now() - start, error: lastError.slice(0, 100) });
 
       const attempt = dep.maxRetries - retries;
-      if (retries > 0) { retries--; await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 16000))); continue; }
+      if (retries > 0 && !isNonRetryableError(resp.status, errorBody)) {
+        retries--;
+        await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attempt), 16000)));
+        continue;
+      }
       recordFailure(dep.id, resp.status, errorBody);
       clearStickyForDeployment(dep.id);
       break;
@@ -689,7 +695,11 @@ async function tryDeployment(
       });
       trace.steps.push({ action: "fail", model: dep.modelName, provider: dep.providerName, status: 502, error: lastError.slice(0, 100) });
       const attemptErr = dep.maxRetries - retries;
-      if (retries > 0) { retries--; await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attemptErr), 16000))); continue; }
+      if (retries > 0 && !isNonRetryableError(502, lastError)) {
+        retries--;
+        await new Promise(r => setTimeout(r, Math.min(2000 * Math.pow(2, attemptErr), 16000)));
+        continue;
+      }
       recordFailure(dep.id, 502, lastError);
       clearStickyForDeployment(dep.id);
       break;
